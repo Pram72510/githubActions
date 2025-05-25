@@ -1,0 +1,52 @@
+name: Build and Deploy Securely with Vault
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build Spring Boot JAR
+        run: ./mvnw clean package
+
+      - name: Set up Docker and Compose
+        uses: docker/setup-buildx-action@v3
+
+      - name: Start containers
+        run: docker-compose up --build -d
+
+      - name: Install Vault CLI
+        run: |
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          sudo apt-get update && sudo apt-get install -y vault
+
+      - name: Fetch secrets from Vault
+        run: |
+          export VAULT_ADDR=${{ secrets.VAULT_ADDR }}
+          export VAULT_TOKEN=${{ secrets.VAULT_TOKEN }}
+
+          vault kv get -field=private_key secret/ssh > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          vault kv get -field=username secret/mysql > db_user.txt
+          vault kv get -field=password secret/mysql > db_pass.txt
+
+      - name: Install Ansible
+        run: sudo apt-get install -y ansible sshpass
+
+      - name: Run Ansible Playbook
+        run: |
+          ansible-playbook -i hosts.ini mysql-install.yml             --extra-vars "db_user=$(cat db_user.txt) db_pass=$(cat db_pass.txt)"

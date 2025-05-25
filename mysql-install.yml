@@ -1,0 +1,29 @@
+- name: Install MySQL on Docker Spring Boot containers
+  hosts: docker_mysql_hosts
+  become: yes
+  vars:
+    mysql_user: "{{ db_user }}"
+    mysql_password: "{{ db_pass }}"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install MySQL Server
+      apt:
+        name: mysql-server
+        state: present
+
+    - name: Start MySQL service
+      service:
+        name: mysql
+        state: started
+        enabled: yes
+
+    - name: Create MySQL user
+      mysql_user:
+        name: "{{ mysql_user }}"
+        password: "{{ mysql_password }}"
+        priv: "*.*:ALL"
+        state: present
